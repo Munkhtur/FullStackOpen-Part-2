@@ -2,13 +2,19 @@ import React, { useState, useEffect } from 'react';
 import Filter from './components/Filter';
 import PersonForm from './components/PersonForm';
 import Persons from './components/Persons';
-import axios from 'axios';
+import { getAll, create, update, remove } from './services/persons';
+import Notification from './components/Notification';
+import './App.css';
 
 const App = () => {
   useEffect(() => {
-    axios.get('http://localhost:3001/persons').then((response) => {
-      setPersons(response.data);
-    });
+    getAll()
+      .then((data) => {
+        setPersons(data);
+      })
+      .catch((error) => {
+        console.log(error);
+      });
   }, []);
 
   const [persons, setPersons] = useState([]);
@@ -16,7 +22,8 @@ const App = () => {
   const [newNumber, setNewNumber] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [showAll, setShowAll] = useState(true);
-  console.log(persons);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -24,18 +31,62 @@ const App = () => {
       name: newName,
       number: newNumber,
     };
-    if (
-      persons.some(
+
+    const result = persons.some(
+      (person) =>
+        person.name.toLocaleLowerCase() === newName.toLocaleLowerCase()
+    );
+    if (result) {
+      const existing = persons.filter(
         (person) =>
           person.name.toLocaleLowerCase() === newName.toLocaleLowerCase()
-      )
-    ) {
-      window.alert(`${newName} already exist`);
-      return;
+      );
+      const answer = window.confirm(
+        `${existing[0].name} already exist, replace the number? `
+      );
+      if (answer) {
+        const id = existing[0].id;
+        const updatePerson = { ...existing[0], number: newNumber };
+        update(id, updatePerson)
+          .then((data) => {
+            setPersons(
+              persons.map((person) => (person.id !== id ? person : data))
+            );
+            setSuccessMessage(`${updatePerson.name} is updated`);
+            setNewName('');
+            setNewNumber('');
+          })
+          .catch((error) => {
+            setErrorMessage(`${error} occured`);
+          });
+      }
+    } else {
+      create(newPerson)
+        .then((data) => {
+          setPersons(persons.concat(data));
+          setSuccessMessage(`${newPerson.name} is created`);
+        })
+        .catch((error) => {
+          setErrorMessage(`${error} occured`);
+        });
+      setNewName('');
+      setNewNumber('');
     }
-    setPersons(persons.concat(newPerson));
-    setNewName('');
-    setNewNumber('');
+  };
+  const handleClick = (id) => {
+    const personToDelete = persons.find((p) => p.id === id);
+    const answer = window.confirm(`Delete ${personToDelete.name} ?`);
+    if (answer) {
+      remove(id)
+        .then((data) => {
+          setPersons(persons.filter((person) => person.id !== id));
+          setErrorMessage(`${personToDelete.name} is deleted`);
+          console.log(data);
+        })
+        .catch((error) => {
+          setErrorMessage(`${personToDelete.name} could not be found`);
+        });
+    }
   };
 
   const handleChange = (e) => {
@@ -70,6 +121,14 @@ const App = () => {
   return (
     <div>
       <h2>Phonebook</h2>
+      {errorMessage !== '' || successMessage !== '' ? (
+        <Notification
+          errorMesage={errorMessage}
+          successMessage={successMessage}
+        />
+      ) : (
+        ''
+      )}
       <Filter searchTerm={searchTerm} handleSearch={handleSearch} />
       <h3>Add new contact</h3>
       <PersonForm
@@ -80,7 +139,7 @@ const App = () => {
         newNumber={newNumber}
       />
       <h2>Numbers</h2>
-      <Persons personToShow={personToShow} />
+      <Persons personToShow={personToShow} handleClick={handleClick} />
     </div>
   );
 };
